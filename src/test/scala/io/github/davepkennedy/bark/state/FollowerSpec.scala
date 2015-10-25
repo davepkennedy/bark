@@ -1,97 +1,103 @@
 package io.github.davepkennedy.bark.state
 
-import akka.actor.ActorRef
-import io.github.davepkennedy.bark.{Vote, RequestVote, ServerInfo, ServerState}
-import org.apache.log4j.BasicConfigurator
-import org.scalatest.{FreeSpec, Matchers}
+import akka.actor.{ActorSystem, Props}
+import akka.testkit.{ImplicitSender, TestFSMRef, TestKit}
+import io.github.davepkennedy.bark.ui.Displayable
+import org.scalatest._
 
-class FollowerSpec extends FreeSpec with Matchers {
-  import io.github.davepkennedy.bark._
+class FollowerStub (val id: Int, initData: FollowerData) extends Follower with Displayable {
+  override def display(id: Int,
+                       name: String,
+                       leader: Boolean,
+                       currentTerm: Int,
+                       commitIndex: Int,
+                       votedFor: Option[Int],
+                       votes: Int,
+                       heartbeat: Long): Unit = {}
+
+  override def shouldRetire: Boolean = false
+
+  startWith(FollowerState, initData)
+}
+
+class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike with Matchers with BeforeAndAfterAll with ImplicitSender {
+
+  def actorProps(id: Int, initData: FollowerData) = Props(classOf[FollowerStub], id, initData)
+
+  override def afterAll(): Unit = {
+    system.terminate()
+  }
 
   "A follower" - {
     "when receiving RequestVote" - {
       "rejects vote if term is before current term" in {
-        val serverInfo = ServerInfo (1, Seq.empty[ActorRef])
-        val serverState = ServerState (serverInfo, currentTerm = 4)
-        val request = RequestVote (3, 2, 0, 0)
-        val (response, _, _) =  Follower.requestVote(request, serverState)
-        response match {
-          case Vote (term, granted) => granted should be (right = false)
-          case _ => fail("A vote was expected here")
-        }
+        val followerData = FollowerData(0, currentTerm = 3)
+        val follower = TestFSMRef(new FollowerStub(1, followerData))
+
+        follower ! RequestVote(term = 2, candidateId = 2, 0, 0)
+        expectMsg(Vote(term = 3, granted = false))
       }
 
       "rejects vote if voted for some other candidate" in {
-        val serverInfo = ServerInfo (1, Seq.empty)
-        val serverState = ServerState (serverInfo, currentTerm = 2, votedFor = Some(2))
-        val requestVote = RequestVote (term = 3, candidateId = 3, 0, 0)
-        val (response, _, _) =  Follower.requestVote(requestVote, serverState)
-        response match {
-          case Vote (term, granted) => granted should be (right = false)
-          case _ => fail("A vote was expected here")
-        }
+        val followerData = FollowerData(0, currentTerm = 3, votedFor = Some(2))
+        val requestVote = RequestVote(term = 3, candidateId = 3, 0, 0)
+        val follower = TestFSMRef(new FollowerStub(1, followerData))
+
+        follower ! requestVote
+        expectMsg(Vote(term = 3, granted = false))
       }
 
       "rejects vote if candidates log is less up to date" in {
-        val serverInfo = ServerInfo (1, Seq.empty)
-        val serverState = ServerState(serverInfo = serverInfo, currentTerm = 3, lastApplied = 4)
-        val requestVote = RequestVote (term = 3, candidateId = 3, lastLogIndex = 3, lastLogTerm = 2)
-        val (response, _, _) =  Follower.requestVote(requestVote, serverState)
-        response match {
-          case Vote (term, granted) => granted should be (right = false)
-          case _ => fail("A vote was expected here")
-        }
+        val followerData = FollowerData(lastTick = 0, currentTerm = 3, lastApplied = 4)
+        val requestVote = RequestVote(term = 3, candidateId = 3, lastLogIndex = 3, lastLogTerm = 2)
+        val follower = TestFSMRef(new FollowerStub(1, followerData))
+
+        follower ! requestVote
+        expectMsg(Vote(term = 3, granted = false))
       }
 
       "accepts vote if voted for is null and candidates log is at least as up to date as receivers log" in {
-        val serverInfo = ServerInfo (1, Seq.empty)
-        val serverState = ServerState(serverInfo = serverInfo, currentTerm = 3, lastApplied = 4)
-        val requestVote = RequestVote (term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
-        val (response, newState, _) =  Follower.requestVote(requestVote, serverState)
-        response match {
-          case Vote (term, granted) =>
-            granted should be (right = true)
-            newState.votedFor match {
-              case Some (votedFor) => votedFor should be (3)
-              case None => fail("Voted for should be Some(3) on successful vote")
-            }
-          case _ => fail("A vote was expected here")
-        }
+        val followerData = FollowerData(lastTick = 0, currentTerm = 3, lastApplied = 4)
+        val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
+        val follower = TestFSMRef(new FollowerStub(1, followerData))
+
+        follower ! requestVote
+        expectMsg(Vote(term = 3, granted = true))
+
+        follower.stateData.votedFor should be(Some(3))
       }
 
       "accepts vote if voted for is candidate id and candidates log is at least as up to date as receivers log" in {
-        val serverInfo = ServerInfo (1, Seq.empty)
-        val serverState = ServerState(serverInfo = serverInfo, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
-        val requestVote = RequestVote (term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
-        val (response, newState, _) =  Follower.requestVote(requestVote, serverState)
-        response match {
-          case Vote (term, granted) =>
-            granted should be (right = true)
-            newState.votedFor match {
-              case Some (votedFor) => votedFor should be (3)
-              case None => fail("Voted for should be Some(3) on successful vote")
-            }
-          case _ => fail("A vote was expected here")
-        }
+        val followerData = FollowerData(lastTick = 0, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
+        val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
+        val follower = TestFSMRef(new FollowerStub(1, followerData))
+
+        follower ! requestVote
+        expectMsg(Vote(term = 3, granted = true))
       }
 
       "accepting a vote resets the timeout" in {
-        val serverInfo = ServerInfo (1, Seq.empty, lastHeartbeat = now - 1000)
-        val serverState = ServerState(serverInfo = serverInfo, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
-        val requestVote = RequestVote (term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
-        val (_, newState, _) =  Follower.requestVote(requestVote, serverState)
-        newState.serverInfo.lastHeartbeat should not be serverInfo.lastHeartbeat
+        val followerData = FollowerData (lastTick = 0, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
+        val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
+        val follower = TestFSMRef(new FollowerStub(1, followerData))
+
+        follower ! requestVote
+        expectMsg(Vote(term = 3, granted = true))
+
+        follower.stateData.asInstanceOf[FollowerData].lastTick should not be 0
       }
 
       "rejecting a vote resets the timeout" in {
-        val serverInfo = ServerInfo (1, Seq.empty, lastHeartbeat = now - 1000)
-        val serverState = ServerState (serverInfo, currentTerm = 4)
-        val request = RequestVote (3, 2, 0, 0)
-        val (_, newState, _) =  Follower.requestVote(request, serverState)
-        newState.serverInfo.lastHeartbeat should not be serverInfo.lastHeartbeat
+        val followerData = FollowerData (lastTick = 0, currentTerm = 4)
+        val requestVote = RequestVote(term = 3, candidateId = 2, 0, 0)
+        val follower = TestFSMRef(new FollowerStub(1, followerData))
+
+        follower ! requestVote
+        expectMsg(Vote(term = 4, granted = false))
+
+        follower.stateData.asInstanceOf[FollowerData].lastTick should not be 0
       }
     }
-
     /*
     "when receiving AppendEntries" - {
       "rejects when term is before current term" in {
@@ -205,7 +211,6 @@ class FollowerSpec extends FreeSpec with Matchers {
 
         serverState.commitIndex should be (1)
       }
-    }
-    */
+      */
   }
 }

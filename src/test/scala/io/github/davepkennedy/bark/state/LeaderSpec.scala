@@ -5,9 +5,9 @@ import io.github.davepkennedy.bark.{Vote, RequestVote, ServerState, ServerInfo}
 import org.scalatest.{FreeSpec, Matchers}
 
 class LeaderSpec extends FreeSpec with Matchers {
+  /*
   "when receiving RequestVote" - {
     /* Basically every scenario from Follower, but all should be rejected */
-
     "rejects vote if term is before current term" in {
       val serverInfo = ServerInfo(1, Seq.empty[ActorRef])
       val serverState = ServerState(serverInfo, currentTerm = 4)
@@ -69,4 +69,5 @@ class LeaderSpec extends FreeSpec with Matchers {
   "when replicating entries" - {
 
   }
+  */
 }

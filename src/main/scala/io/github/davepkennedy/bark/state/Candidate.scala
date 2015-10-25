@@ -1,86 +1,88 @@
 package io.github.davepkennedy.bark.state
 
 import io.github.davepkennedy.bark._
+import io.github.davepkennedy.bark.ui.Displayable
 
-object Candidate extends ActorState {
-  import ActorState._
+trait Candidate extends RaftActor {
+  this: Displayable =>
 
-  import io.github.davepkennedy.bark._
-
-  protected def isLeader = false
-  protected def namePrefix = "Cand. "
-
-  def timerTick (serverState: ServerState): (Option[Request], ServerState, ActorState) = {
-    if (now - serverState.serverInfo.lastHeartbeat > StateTimeout) {
-      LOGGER.info(s"Candidate ${serverState.serverInfo.id} only received ${serverState.serverInfo.votesReceived} - reverting to follower")
-      val newState = serverState.copy(
-        serverInfo = serverState.serverInfo.copy(
-          votesReceived = 0
-        ),
-        votedFor = None,
-        currentTerm = serverState.currentTerm - 1
-      )
-      (None, newState, Follower)
-    } else {
-      (None, serverState, Candidate)
-    }
+  private def displayMe (data: CandidateData): Unit = {
+    display(id,
+      "Cand.",
+      leader = false,
+      data.currentTerm,
+      data.commitIndex,
+      votedFor = data.votedFor,
+      data.votesGranted,
+      data.lastTick)
   }
 
-  def vote (vote: Vote, serverState: ServerState): (ServerState, ActorState) = {
-    val newState = serverState.copy(
-      serverInfo = serverState.serverInfo.copy(
-        votesReceived = serverState.serverInfo.votesReceived + (if (vote.voteGranted) 1 else 0)
-      ))
-
-    //LOGGER.info(s"Candidate ${newState.serverInfo.id} now has ${newState.serverInfo.votesReceived} votes")
-    if (newState.serverInfo.votesReceived >= (serverState.serverInfo.peers.length / 2) + 1) {
-      LOGGER.info(s"Candidate {} progressing to Leader with {} votes",
-        newState.serverInfo.id, newState.serverInfo.votesReceived)
-      (newState, Leader)
-    } else {
-      (newState, Candidate)
-    }
-  }
-
-  override def requestVote(voteRequest: RequestVote,
-                           serverState: ServerState): (Response, ServerState, ActorState) = {
-    /*
-    This candidate should have already voted for itself and should never vote for another
-     */
-    val newState = serverState.copy(serverInfo = serverState.serverInfo.copy(lastHeartbeat = now))
-    (rejectVote(serverState.currentTerm), newState, this)
-    /*
-    val rejectingState = serverState.copy(
-      serverInfo = serverState.serverInfo.copy(
-        lastHeartbeat = now
-      )
-    )
-
-    if (voteRequest.term < serverState.currentTerm) {
-      LOGGER.info("Candidate {} rejecting vote due to term match", serverState.serverInfo.id)
-      (rejectVote(serverState.currentTerm), rejectingState, this)
-    } else if (serverState.votedFor.getOrElse(voteRequest.candidateId) == voteRequest.candidateId &&
-      voteRequest.lastLogIndex >= serverState.lastApplied
-    ) {
-      val newState = serverState.copy(
-        votedFor = Some(voteRequest.candidateId)
-        , serverInfo = serverState.serverInfo.copy(lastHeartbeat = now)
-      )
-      LOGGER.info(s"Candidate ${serverState.serverInfo.id} has voted for Candidate ${voteRequest.candidateId}")
-      (acceptVote(serverState.currentTerm), newState, this)
-    } else {
-      LOGGER.info(s"Candidate ${serverState.serverInfo.id} r" +
-        s"ejecting vote for ${voteRequest.candidateId} due id mismatch or log state. " +
-        s"Voted for ${serverState.votedFor}")
-      (rejectVote(serverState.currentTerm), rejectingState, this)
-    }
-    */
-  }
-
-  override def appendEntries(appendEntries: AppendEntries,
-                             serverState: ServerState): (Response, ServerState, ActorState) = {
-    //LOGGER.info("Candidate {} received AppendEntries - reverting to follower", serverState.serverInfo.id)
-    val newState = serverState.copy(serverInfo = serverState.serverInfo.copy(lastHeartbeat = now))
-    (acceptEntries(appendEntries.term), newState, Follower)
+  when (CandidateState) {
+    case Event (Tick, data: CandidateData) =>
+      displayMe(data)
+      if (now - data.lastTick > RaftActor.StateTimeout) {
+        data.peers foreach {
+          peer =>
+            peer ! RequestVote (
+              data.currentTerm + 1,
+              id,
+              data.lastApplied,
+              data.currentTerm)
+        }
+        stay using data.copy(
+          lastTick = now,
+          votesGranted = 1,
+          votedFor = Some(id),
+          currentTerm = data.currentTerm + 1)
+      } else {
+        stay using data
+      }
+    case Event (Vote(term, voteGranted), data: CandidateData) =>
+      displayMe(data)
+      val votesGranted = data.votesGranted + (if (voteGranted) {1} else {0})
+      if (votesGranted >= ((data.peers.length / 2) + 1)) {
+        goto (LeaderState) using LeaderData (
+          lastTick = now,
+          currentTerm = data.currentTerm,
+          peers = data.peers,
+          commitIndex = data.commitIndex,
+          lastApplied = data.lastApplied,
+          nextIndex = Array.empty,
+          matchIndex = Array.empty)
+      } else {
+        log.info("Candidate {} has a vote {}", id, voteGranted)
+        stay using data.copy(
+          lastTick = now, votesGranted = votesGranted)
+      }
+    case Event(appendEntries: AppendEntries, data: CandidateData) =>
+      log.info("Candidate {} has been sent AppendEntries", id)
+      self ! appendEntries
+      goto (FollowerState) using FollowerData (
+        lastTick = now,
+        currentTerm = appendEntries.term,
+        peers = data.peers,
+        commitIndex = data.commitIndex,
+        lastApplied = data.lastApplied)
+    case Event(requestVote: RequestVote, data: CandidateData) =>
+      displayMe(data)
+      if (shouldAcceptVote (requestVote, data)) {
+        if (requestVote.candidateId == id) {
+          stay using data
+        } else {
+          log.info("Candidate {} is voting for {} ({})", id, requestVote.candidateId, sender())
+          sender ! acceptVote(data.currentTerm)
+          goto(FollowerState) using FollowerData(
+            lastTick = now,
+            currentTerm = requestVote.term,
+            peers = data.peers,
+            commitIndex = data.commitIndex,
+            lastApplied = data.lastApplied,
+            votedFor = Some(requestVote.candidateId))
+        }
+      } else {
+        log.info("Candidate {} is not voting for {} ({})", id, requestVote.candidateId, sender())
+        sender ! rejectVote(data.currentTerm)
+        stay using data.copy(lastTick = now)
+      }
   }
 }
