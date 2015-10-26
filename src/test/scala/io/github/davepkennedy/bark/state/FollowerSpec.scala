@@ -5,7 +5,7 @@ import akka.testkit.{ImplicitSender, TestFSMRef, TestKit}
 import io.github.davepkennedy.bark.ui.Displayable
 import org.scalatest._
 
-class FollowerStub (val id: Int, initData: FollowerData) extends Follower with Displayable {
+class FollowerStub (val id: Int, initData: FollowerData) extends Follower with Displayable with TimeFixture {
   override def display(id: Int,
                        name: String,
                        leader: Boolean,
@@ -80,22 +80,24 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val followerData = FollowerData (lastTick = 0, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val follower = TestFSMRef(new FollowerStub(1, followerData))
+        follower.underlyingActor.setTime(500)
 
         follower ! requestVote
         expectMsg(Vote(term = 3, granted = true))
 
-        follower.stateData.asInstanceOf[FollowerData].lastTick should not be 0
+        follower.stateData.asInstanceOf[FollowerData].lastTick should be (500)
       }
 
       "rejecting a vote resets the timeout" in {
         val followerData = FollowerData (lastTick = 0, currentTerm = 4)
         val requestVote = RequestVote(term = 3, candidateId = 2, 0, 0)
         val follower = TestFSMRef(new FollowerStub(1, followerData))
+        follower.underlyingActor.setTime(500)
 
         follower ! requestVote
         expectMsg(Vote(term = 4, granted = false))
 
-        follower.stateData.asInstanceOf[FollowerData].lastTick should not be 0
+        follower.stateData.asInstanceOf[FollowerData].lastTick should be (500)
       }
     }
     /*

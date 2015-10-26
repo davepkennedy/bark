@@ -4,7 +4,7 @@ import io.github.davepkennedy.bark._
 import io.github.davepkennedy.bark.ui.Displayable
 
 trait Candidate extends RaftActor {
-  this: Displayable =>
+  this: Displayable with TimeSource =>
 
   private def displayMe (data: CandidateData): Unit = {
     display(id,
@@ -50,12 +50,10 @@ trait Candidate extends RaftActor {
           nextIndex = Array.empty,
           matchIndex = Array.empty)
       } else {
-        log.info("Candidate {} has a vote {}", id, voteGranted)
         stay using data.copy(
           lastTick = now, votesGranted = votesGranted)
       }
     case Event(appendEntries: AppendEntries, data: CandidateData) =>
-      log.info("Candidate {} has been sent AppendEntries", id)
       self ! appendEntries
       goto (FollowerState) using FollowerData (
         lastTick = now,
@@ -63,13 +61,13 @@ trait Candidate extends RaftActor {
         peers = data.peers,
         commitIndex = data.commitIndex,
         lastApplied = data.lastApplied)
+
     case Event(requestVote: RequestVote, data: CandidateData) =>
       displayMe(data)
       if (shouldAcceptVote (requestVote, data)) {
         if (requestVote.candidateId == id) {
           stay using data
         } else {
-          log.info("Candidate {} is voting for {} ({})", id, requestVote.candidateId, sender())
           sender ! acceptVote(data.currentTerm)
           goto(FollowerState) using FollowerData(
             lastTick = now,
@@ -80,7 +78,6 @@ trait Candidate extends RaftActor {
             votedFor = Some(requestVote.candidateId))
         }
       } else {
-        log.info("Candidate {} is not voting for {} ({})", id, requestVote.candidateId, sender())
         sender ! rejectVote(data.currentTerm)
         stay using data.copy(lastTick = now)
       }

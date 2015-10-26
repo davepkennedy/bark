@@ -1,15 +1,15 @@
 package io.github.davepkennedy.bark.state
 
+import io.github.davepkennedy.bark.TimeSource
 import io.github.davepkennedy.bark.ui.Displayable
 
 
 trait Follower extends RaftActor {
-  this: Displayable =>
+  this: Displayable with TimeSource =>
 
   when(FollowerState) {
     case Event (requestVote: RequestVote, data: FollowerData) =>
       if (shouldAcceptVote (requestVote, data)) {
-        log.info("Follower {} is voting for {}", id, requestVote.candidateId)
         sender ! acceptVote(data.currentTerm)
         stay using data.copy (
           lastTick = now,

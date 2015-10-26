@@ -17,7 +17,7 @@ object BarkStateManager {
   case class Bootstrap (peers: Seq[ActorRef])
 }
 
-class BarkStateManager (val id: Int, display: ActorRef) extends Candidate with Follower with Leader with Displayable {
+class BarkStateManager (val id: Int, display: ActorRef) extends Candidate with Follower with Leader with Displayable with SystemTime {
   import BarkStateManager._
   import context._
 

@@ -3,6 +3,7 @@ package io.github.davepkennedy.bark.state
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorLogging, FSM, ActorRef}
+import io.github.davepkennedy.bark.TimeSource
 import io.github.davepkennedy.bark.ui.Displayable
 
 import scala.concurrent.duration.FiniteDuration
@@ -71,7 +72,7 @@ object RaftActor {
 }
 
 trait RaftActor extends FSM[RaftState,RaftData] with ActorLogging {
-  this: Displayable =>
+  this: Displayable with TimeSource =>
   def id: Int
   def shouldRetire: Boolean
   def shouldAcceptVote (requestVote: RequestVote, raftData: RaftData): Boolean = {
@@ -81,7 +82,6 @@ trait RaftActor extends FSM[RaftState,RaftData] with ActorLogging {
     ) true
     else false
   }
-  def now = System.currentTimeMillis()
 
   def acceptVote (term: Int) = Vote(term, granted = true)
   def rejectVote (term: Int) = Vote(term, granted = false)

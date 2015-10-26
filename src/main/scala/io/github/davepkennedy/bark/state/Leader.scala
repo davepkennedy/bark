@@ -4,7 +4,7 @@ import io.github.davepkennedy.bark._
 import io.github.davepkennedy.bark.ui.Displayable
 
 trait Leader extends RaftActor {
-  this: Displayable =>
+  this: Displayable with TimeSource =>
 
   private def displayMe(data: LeaderData): Unit = {
     display(id,
@@ -39,8 +39,19 @@ trait Leader extends RaftActor {
       }
 
     case Event (requestVote: RequestVote, data: LeaderData) =>
-      sender ! rejectVote(data.currentTerm)
-      stay using data
+      if (shouldAcceptVote (requestVote, data)) {
+        log.info("Leader {} is voting for {}", id, requestVote.candidateId)
+        sender ! acceptVote(data.currentTerm)
+        goto (FollowerState) using FollowerData (lastTick = now,
+          currentTerm = data.currentTerm,
+          votedFor = Some(requestVote.candidateId),
+          peers = data.peers,
+          commitIndex = data.commitIndex,
+          lastApplied = data.lastApplied)
+      } else {
+        sender ! rejectVote(data.currentTerm)
+        stay using data.copy(lastTick = now)
+      }
 
     case Event (appendEntries: AppendEntries, data: LeaderData) =>
       sender ! rejectEntries(data.currentTerm)
