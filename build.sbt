@@ -8,6 +8,7 @@ scalaVersion := "2.11.7"
 
 libraryDependencies ++= Seq(
   "org.scalatest" % "scalatest_2.11" % "2.2.1" % "test",
+  "com.typesafe.akka" %% "akka-testkit" % "2.4.0" % "test",
   "com.googlecode.lanterna" % "lanterna" % "2.1.9",
   "com.typesafe.akka" %% "akka-actor" % "2.4.0",
   "com.typesafe.akka" %% "akka-slf4j" % "2.4.0",

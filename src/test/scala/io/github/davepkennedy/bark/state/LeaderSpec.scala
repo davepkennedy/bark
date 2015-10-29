@@ -1,72 +1,155 @@
 package io.github.davepkennedy.bark.state
 
-import akka.actor.ActorRef
-import io.github.davepkennedy.bark.{Vote, RequestVote, ServerState, ServerInfo}
-import org.scalatest.{FreeSpec, Matchers}
+import akka.actor.ActorSystem
+import akka.testkit.{ImplicitSender, TestFSMRef, TestKit}
+import io.github.davepkennedy.bark.ui.Displayable
+import org.scalatest.{BeforeAndAfterAll, FreeSpecLike, Matchers}
 
-class LeaderSpec extends FreeSpec with Matchers {
+class LeaderStub (val id: Int, initData: LeaderData) extends Leader with Displayable with TimeFixture {
+  override def display(id: Int,
+                       name: String,
+                       leader: Boolean,
+                       currentTerm: Int,
+                       commitIndex: Int,
+                       votedFor: Option[Int],
+                       votes: Int,
+                       heartbeat: Long): Unit = {}
+
+  var retire = false
+
+  def shouldRetire(retire: Boolean): Unit = this.retire = retire
+  override def shouldRetire: Boolean = false
+
+  startWith(LeaderState, initData)
+
+  when (FollowerState) {
+    case Event(appendEntries: AppendEntries, raftData: RaftData) =>
+      stay using raftData
+  }
+}
+
+class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike with Matchers with BeforeAndAfterAll with ImplicitSender {
+
+  override def afterAll(): Unit = {
+    system.terminate()
+  }
+
   "when receiving RequestVote" - {
-    /* Basically every scenario from Follower, but all should be rejected */
-
     "rejects vote if term is before current term" in {
-      val serverInfo = ServerInfo(1, Seq.empty[ActorRef])
-      val serverState = ServerState(serverInfo, currentTerm = 4)
-      val request = RequestVote(3, 2, 0, 0)
-      val (response, _, _) = Leader.requestVote(request, serverState)
-      response match {
-        case Vote(term, granted) => granted should be(right = false)
-        case _ => fail("A vote was expected here")
-      }
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+
+      leader ! RequestVote(term = 2, candidateId = 2, 0, 0)
+      expectMsg(Vote(term = 3, granted = false))
     }
 
     "rejects vote if voted for some other candidate" in {
-      val serverInfo = ServerInfo(1, Seq.empty)
-      val serverState = ServerState(serverInfo, currentTerm = 2, votedFor = Some(2))
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 3, candidateId = 3, 0, 0)
-      val (response, _, _) = Leader.requestVote(requestVote, serverState)
-      response match {
-        case Vote(term, granted) => granted should be(right = false)
-        case _ => fail("A vote was expected here")
-      }
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+
+      leader ! requestVote
+      expectMsg(Vote(term = 3, granted = false))
     }
 
     "rejects vote if candidates log is less up to date" in {
-      val serverInfo = ServerInfo(1, Seq.empty)
-      val serverState = ServerState(serverInfo = serverInfo, currentTerm = 3, lastApplied = 4)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(lastTick = 0, currentTerm = term , peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 3, candidateId = 3, lastLogIndex = 3, lastLogTerm = 2)
-      val (response, _, _) = Leader.requestVote(requestVote, serverState)
-      response match {
-        case Vote(term, granted) => granted should be(right = false)
-        case _ => fail("A vote was expected here")
-      }
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+
+      leader ! requestVote
+      expectMsg(Vote(term = 3, granted = false))
     }
 
-    "reject vote if voted for is null and candidates log is at least as up to date as receivers log" in {
-      val serverInfo = ServerInfo(1, Seq.empty)
-      val serverState = ServerState(serverInfo = serverInfo, currentTerm = 3, lastApplied = 4)
+    "accepts vote if voted for is null and candidates log is at least as up to date as receivers log" in {
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
-      val (response, _, _) = Leader.requestVote(requestVote, serverState)
-      response match {
-        case Vote(term, granted) =>
-          granted should be(right = false)
-        case _ => fail("A vote was expected here")
-      }
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+
+      leader ! requestVote
+      expectMsg(Vote(term = 3, granted = true))
+
+      leader.stateData.votedFor should be(Some(3))
     }
 
     "accepts vote if voted for is candidate id and candidates log is at least as up to date as receivers log" in {
-      val serverInfo = ServerInfo(1, Seq.empty)
-      val serverState = ServerState(serverInfo = serverInfo, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
-      val (response, _, _) = Leader.requestVote(requestVote, serverState)
-      response match {
-        case Vote(term, granted) =>
-          granted should be(right = false)
-        case _ => fail("A vote was expected here")
-      }
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+
+      leader ! requestVote
+      expectMsg(Vote(term = 3, granted = true))
+    }
+
+    "accepting a vote reverts to follower" in {
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData (lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
+      val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+
+      leader ! requestVote
+      expectMsg(Vote(term = 3, granted = true))
+
+      leader.stateName should be (FollowerState)
+    }
+
+    "accepting a vote resets the timeout" in {
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData (lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
+      val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+      leader.underlyingActor.setTime(500)
+
+      leader ! requestVote
+      expectMsg(Vote(term = 3, granted = true))
+
+      leader.stateData.asInstanceOf[FollowerData].lastTick should be (500)
+    }
+
+    /* The leader does not have to care about timeouts */
+    "rejecting a vote doesn't affect the timeout" in {
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
+      val leader = TestFSMRef(new LeaderStub(1, leaderData))
+
+      leader ! RequestVote(term = 2, candidateId = 2, 0, 0)
+      expectMsg(Vote(term = 3, granted = false))
+
+      leader.stateData.asInstanceOf[LeaderData].lastTick should be (0)
     }
   }
-
+  /*
   "when replicating entries" - {
 
   }
+  */
 }

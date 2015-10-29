@@ -1,38 +1,59 @@
 package io.github.davepkennedy.bark.state
 
 import io.github.davepkennedy.bark._
+import io.github.davepkennedy.bark.ui.Displayable
 
-object Leader extends ActorState {
-  import ActorState._
+trait Leader extends RaftActor {
+  this: Displayable with TimeSource =>
 
-  protected def isLeader = true
-  protected def namePrefix = "Leader"
-
-  def timerTick (serverState: ServerState): (Option[Request], ServerState, ActorState) = {
-    //LOGGER.info("Leader {} must heartbeat to followers", serverState.serverInfo.id)
-
-    if (chance(1)) {
-      val newState = serverState.copy(
-        serverInfo = serverState.serverInfo.copy(votesReceived = 0)
-      )
-      (None, serverState, Follower)
-    } else {
-      val request = AppendEntries(serverState.currentTerm, serverState.serverInfo.id,
-        0, 0, Array.empty[Entry], 0)
-      (Some(request), serverState, this)
-    }
+  private def displayMe(data: LeaderData): Unit = {
+    display(id,
+      "Leader",
+      leader = true,
+      data.currentTerm,
+      data.log.lastCommitted,
+      votedFor = data.votedFor,
+      data.peers.length,
+      data.lastTick)
   }
 
-  def vote (vote: Vote, serverState: ServerState): (ServerState, ActorState) = {
-    LOGGER.info("Leader receiver a vote - ignoring")
-    (serverState, this)
+  when(LeaderState) {
+    //case Event (Vote(term, granted), data: LeaderData) =>
+    //  stay using data
+
+    case Event (Tick, data: LeaderData) =>
+      displayMe(data)
+      if (shouldRetire) {
+        goto (FollowerState) using FollowerData (lastTick = now,
+          currentTerm = data.currentTerm,
+          peers = data.peers,
+          log = data.log)
+      }
+      else {
+        data.peers foreach {
+          peer =>
+            peer ! AppendEntries (data.currentTerm, id, 0, 0, Array.empty, data.log.lastApplied)
+        }
+        stay using data
+      }
+
+    case Event (requestVote: RequestVote, data: LeaderData) =>
+      if (shouldAcceptVote (requestVote, data)) {
+        log.info("Leader {} is voting for {}", id, requestVote.candidateId)
+        sender ! acceptVote(data.currentTerm)
+        goto (FollowerState) using FollowerData (lastTick = now,
+          currentTerm = data.currentTerm,
+          votedFor = Some(requestVote.candidateId),
+          peers = data.peers,
+          log = data.log)
+      } else {
+        sender ! rejectVote(data.currentTerm)
+        stay using data.copy(lastTick = now)
+      }
+
+    case Event (appendEntries: AppendEntries, data: LeaderData) =>
+      sender ! rejectEntries(data.currentTerm)
+      stay using data
   }
 
-  override def requestVote(voteRequest: RequestVote,
-                           serverState: ServerState): (Response, ServerState, ActorState) =
-    (rejectVote(serverState.currentTerm), serverState, this)
-
-  override def appendEntries(appendEntries: AppendEntries,
-                             serverState: ServerState): (Response, ServerState, ActorState) =
-    (rejectEntries(serverState.currentTerm), serverState, this)
 }
