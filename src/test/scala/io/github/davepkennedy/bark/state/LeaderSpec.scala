@@ -36,7 +36,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
 
   "when receiving RequestVote" - {
     "rejects vote if term is before current term" in {
-      val leaderData = LeaderData(0, currentTerm = 3, peers = Seq.empty, commitIndex = 4, lastApplied = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
 
       leader ! RequestVote(term = 2, candidateId = 2, 0, 0)
@@ -44,7 +48,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
     }
 
     "rejects vote if voted for some other candidate" in {
-      val leaderData = LeaderData(0, currentTerm = 3, peers = Seq.empty, commitIndex = 4, lastApplied = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 3, candidateId = 3, 0, 0)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
 
@@ -53,7 +61,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
     }
 
     "rejects vote if candidates log is less up to date" in {
-      val leaderData = LeaderData(lastTick = 0, currentTerm = 3, lastApplied = 4, peers = Seq.empty, commitIndex = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(lastTick = 0, currentTerm = term , peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 3, candidateId = 3, lastLogIndex = 3, lastLogTerm = 2)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
 
@@ -62,7 +74,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
     }
 
     "accepts vote if voted for is null and candidates log is at least as up to date as receivers log" in {
-      val leaderData = LeaderData(lastTick = 0, currentTerm = 3, peers = Seq.empty, commitIndex = 4, lastApplied = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
 
@@ -73,7 +89,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
     }
 
     "accepts vote if voted for is candidate id and candidates log is at least as up to date as receivers log" in {
-      val leaderData = LeaderData(lastTick = 0, currentTerm = 3, peers = Seq.empty, commitIndex = 4, lastApplied = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
 
@@ -82,7 +102,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
     }
 
     "accepting a vote reverts to follower" in {
-      val leaderData = LeaderData (lastTick = 0, currentTerm = 3, peers = Seq.empty, commitIndex = 4, lastApplied = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData (lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
 
@@ -93,7 +117,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
     }
 
     "accepting a vote resets the timeout" in {
-      val leaderData = LeaderData (lastTick = 0, currentTerm = 3, peers = Seq.empty, commitIndex = 4, lastApplied = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData (lastTick = 0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
       leader.underlyingActor.setTime(500)
@@ -106,7 +134,11 @@ class LeaderSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLike
 
     /* The leader does not have to care about timeouts */
     "rejecting a vote doesn't affect the timeout" in {
-      val leaderData = LeaderData(0, currentTerm = 3, peers = Seq.empty, commitIndex = 4, lastApplied = 4, nextIndex = Array.empty, matchIndex = Array.empty)
+      val term = 3
+      val log = logUpTo(term = term, maxEntry = 4)
+      log.commitTo(4)
+
+      val leaderData = LeaderData(0, currentTerm = term, peers = Seq.empty, log = log, nextIndex = Array.empty, matchIndex = Array.empty)
       val leader = TestFSMRef(new LeaderStub(1, leaderData))
 
       leader ! RequestVote(term = 2, candidateId = 2, 0, 0)

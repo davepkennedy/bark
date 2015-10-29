@@ -11,7 +11,7 @@ trait Candidate extends RaftActor {
       "Cand.",
       leader = false,
       data.currentTerm,
-      data.commitIndex,
+      data.log.lastApplied,
       votedFor = data.votedFor,
       data.votesGranted,
       data.lastTick)
@@ -26,8 +26,8 @@ trait Candidate extends RaftActor {
             peer ! RequestVote (
               data.currentTerm + 1,
               id,
-              data.lastApplied,
-              data.currentTerm)
+              data.log.lastApplied,
+              data.log.lastTerm)
         }
         stay using data.copy(
           lastTick = now,
@@ -45,8 +45,7 @@ trait Candidate extends RaftActor {
           lastTick = now,
           currentTerm = data.currentTerm,
           peers = data.peers,
-          commitIndex = data.commitIndex,
-          lastApplied = data.lastApplied,
+          log = data.log,
           nextIndex = Array.empty,
           matchIndex = Array.empty)
       } else {
@@ -54,13 +53,17 @@ trait Candidate extends RaftActor {
           lastTick = now, votesGranted = votesGranted)
       }
     case Event(appendEntries: AppendEntries, data: CandidateData) =>
-      self ! appendEntries
+      if (shouldAcceptEntries(appendEntries, data)) {
+        appendEntriesToLog (appendEntries, data)
+        sender ! acceptEntries(data.currentTerm)
+      } else {
+        sender ! rejectEntries(data.currentTerm)
+      }
       goto (FollowerState) using FollowerData (
         lastTick = now,
         currentTerm = appendEntries.term,
         peers = data.peers,
-        commitIndex = data.commitIndex,
-        lastApplied = data.lastApplied)
+        log = data.log)
 
     case Event(requestVote: RequestVote, data: CandidateData) =>
       displayMe(data)
@@ -73,8 +76,7 @@ trait Candidate extends RaftActor {
             lastTick = now,
             currentTerm = requestVote.term,
             peers = data.peers,
-            commitIndex = data.commitIndex,
-            lastApplied = data.lastApplied,
+            log = data.log,
             votedFor = Some(requestVote.candidateId))
         }
       } else {

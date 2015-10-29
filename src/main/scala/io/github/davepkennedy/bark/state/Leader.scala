@@ -11,7 +11,7 @@ trait Leader extends RaftActor {
       "Leader",
       leader = true,
       data.currentTerm,
-      data.commitIndex,
+      data.log.lastCommitted,
       votedFor = data.votedFor,
       data.peers.length,
       data.lastTick)
@@ -27,13 +27,12 @@ trait Leader extends RaftActor {
         goto (FollowerState) using FollowerData (lastTick = now,
           currentTerm = data.currentTerm,
           peers = data.peers,
-          commitIndex = data.commitIndex,
-          lastApplied = data.lastApplied)
+          log = data.log)
       }
       else {
         data.peers foreach {
           peer =>
-            peer ! AppendEntries (data.currentTerm, id, 0, 0, Array.empty, data.lastApplied)
+            peer ! AppendEntries (data.currentTerm, id, 0, 0, Array.empty, data.log.lastApplied)
         }
         stay using data
       }
@@ -46,8 +45,7 @@ trait Leader extends RaftActor {
           currentTerm = data.currentTerm,
           votedFor = Some(requestVote.candidateId),
           peers = data.peers,
-          commitIndex = data.commitIndex,
-          lastApplied = data.lastApplied)
+          log = data.log)
       } else {
         sender ! rejectVote(data.currentTerm)
         stay using data.copy(lastTick = now)

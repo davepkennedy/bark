@@ -18,30 +18,26 @@ object LeaderState extends RaftState
 sealed trait RaftData {
   val currentTerm: Int
   val votedFor: Option[Int]
-  val commitIndex: Int
-  val lastApplied: Int
+  val log: Log
 }
 
 final case class FollowerData (lastTick: Long,
                                currentTerm: Int = 0,
                                votedFor: Option[Int] = None,
                                peers: Seq[ActorRef] = Seq.empty,
-                               commitIndex: Int = 0,
-                               lastApplied: Int = 0) extends RaftData
+                               log: Log = new Log) extends RaftData
 
 final case class CandidateData (lastTick: Long,
                                 currentTerm: Int,
                                 votesGranted: Int = 0,
                                 votedFor: Option[Int] = None,
                                 peers: Seq[ActorRef],
-                                commitIndex: Int,
-                                lastApplied: Int) extends RaftData
+                                log: Log = new Log) extends RaftData
 
 final case class LeaderData (lastTick: Long,
                              currentTerm: Int,
                              peers: Seq[ActorRef],
-                             commitIndex: Int,
-                             lastApplied: Int,
+                             log: Log = new Log,
                              nextIndex: Array[Int],
                              matchIndex: Array[Int]) extends RaftData {
   val votedFor = None
@@ -55,7 +51,6 @@ final case class RequestVote (term: Int,
 final case class Vote (term: Int,
                         granted: Boolean)
 
-final case class LogEntry (term: Int, data: Array[Byte])
 final case class AppendEntries (term: Int,
                                  leaderId: Int,
                                  prevLogIndex: Int,
@@ -75,10 +70,26 @@ trait RaftActor extends FSM[RaftState,RaftData] with ActorLogging {
   this: Displayable with TimeSource =>
   def id: Int
   def shouldRetire: Boolean
+  def shouldAcceptEntries (appendEntries: AppendEntries, raftData: RaftData): Boolean = {
+    if (appendEntries.term >= raftData.currentTerm &&
+      raftData.log.hasEntryAt(appendEntries.prevLogIndex, appendEntries.prevLogTerm)) {
+      true
+    } else {
+      false
+    }
+  }
+
+  def appendEntriesToLog (appendEntries: AppendEntries, raftData: RaftData): Unit = {
+    raftData.log.append(appendEntries.entries)
+    if (appendEntries.leaderCommit > raftData.log.lastCommitted) {
+      raftData.log.commitTo(math.min(appendEntries.leaderCommit, raftData.log.lastApplied))
+    }
+  }
+
   def shouldAcceptVote (requestVote: RequestVote, raftData: RaftData): Boolean = {
     if (requestVote.term >= raftData.currentTerm &&
-      raftData.votedFor.getOrElse(requestVote.candidateId) == requestVote.candidateId &&
-      requestVote.lastLogIndex >= raftData.lastApplied
+      requestVote.lastLogIndex >= raftData.log.lastApplied &&
+      raftData.votedFor.getOrElse(requestVote.candidateId) == requestVote.candidateId
     ) true
     else false
   }

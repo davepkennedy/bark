@@ -23,19 +23,19 @@ trait Follower extends RaftActor {
     //  stay using data.copy(lastTick = now)
     case Event (appendEntries: AppendEntries, data: FollowerData) =>
       // Not actually appending entries yet…
-      if (appendEntries.term >= data.currentTerm) {
+      if (shouldAcceptEntries(appendEntries, data)) {
+        appendEntriesToLog(appendEntries, data)
         sender ! acceptEntries(data.currentTerm)
-        stay using data.copy(lastTick = now)
       } else {
         sender ! rejectEntries(data.currentTerm)
-        stay using data.copy(lastTick = now)
       }
+      stay using data.copy(lastTick = now)
     case Event (Tick, data: FollowerData) =>
       display(id,
         "Follw.",
         leader = false,
         data.currentTerm,
-        data.commitIndex,
+        data.log.lastApplied,
         votedFor = data.votedFor,
         0,
         data.lastTick)
@@ -49,8 +49,7 @@ trait Follower extends RaftActor {
           votesGranted = 0,
           votedFor = None,
           peers = data.peers,
-          commitIndex = data.commitIndex,
-          lastApplied = data.lastApplied)
+          log = data.log)
       } else {
         stay using data
       }

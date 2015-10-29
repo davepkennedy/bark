@@ -48,7 +48,9 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
       }
 
       "rejects vote if candidates log is less up to date" in {
-        val followerData = FollowerData(lastTick = 0, currentTerm = 3, lastApplied = 4)
+        val term = 3
+        val log = logUpTo(term = term, maxEntry = 4)
+        val followerData = FollowerData(lastTick = 0, currentTerm = term, log = log)
         val requestVote = RequestVote(term = 3, candidateId = 3, lastLogIndex = 3, lastLogTerm = 2)
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
@@ -57,7 +59,10 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
       }
 
       "accepts vote if voted for is null and candidates log is at least as up to date as receivers log" in {
-        val followerData = FollowerData(lastTick = 0, currentTerm = 3, lastApplied = 4)
+        val term = 3
+        val log = logUpTo(term = term, maxEntry = 4)
+
+        val followerData = FollowerData(lastTick = 0, currentTerm = term, log = log)
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
@@ -68,7 +73,9 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
       }
 
       "accepts vote if voted for is candidate id and candidates log is at least as up to date as receivers log" in {
-        val followerData = FollowerData(lastTick = 0, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
+        val term = 3
+        val log = logUpTo(term = term, maxEntry = 4)
+        val followerData = FollowerData(lastTick = 0, currentTerm = term, log = log, votedFor = Some(3))
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
@@ -77,7 +84,10 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
       }
 
       "accepting a vote resets the timeout" in {
-        val followerData = FollowerData (lastTick = 0, currentTerm = 3, lastApplied = 4, votedFor = Some(3))
+        val term = 3
+        val log = logUpTo(term = term, maxEntry = 4)
+
+        val followerData = FollowerData (lastTick = 0, currentTerm = term, log = log, votedFor = Some(3))
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val follower = TestFSMRef(new FollowerStub(1, followerData))
         follower.underlyingActor.setTime(500)
@@ -100,119 +110,72 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         follower.stateData.asInstanceOf[FollowerData].lastTick should be (500)
       }
     }
-    /*
+
     "when receiving AppendEntries" - {
       "rejects when term is before current term" in {
-        val serverState = new ServerState
-        println("setup")
-        val follower = new Follower (serverState)
+        val term = 4
+        val maxLogEntry = 4
+        val leaderTerm = term - 1
+        val log = logUpTo(term = term, maxLogEntry)
+        log.commitTo(4)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val appendEntries = AppendEntries(term = leaderTerm, leaderId = 99, prevLogIndex = 4, prevLogTerm = term, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
+        val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
-        val result = follower.appendEntries(
-          AppendEntriesRequest(
-            term = -1,
-            leaderId = 1,
-            prevLogIndex = 1,
-            prevLogTerm = 1,
-            entries = Array(),
-            leaderCommit = 1))
-        result.success should be (right = false)
+        candidate ! appendEntries
+        expectMsg(EntriesAccepted(term, success = false))
       }
 
       "Reply false if log doesn’t contain an entry at prevLogIndex" in {
-        val serverState = new ServerState
-        val follower = new Follower (serverState)
+        val term = 4
+        val maxLogEntry = 4
+        val leaderTerm = term + 1
+        val log = logUpTo(term = term, maxLogEntry)
+        log.commitTo(4)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val appendEntries = AppendEntries(term = leaderTerm, leaderId = 99, prevLogIndex = maxLogEntry + 1, prevLogTerm = term, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
+        val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
-        val result = follower.appendEntries(
-          AppendEntriesRequest(
-            term = 2,
-            leaderId = 1,
-            prevLogIndex = 2,
-            prevLogTerm = 1,
-            entries = Array(),
-            leaderCommit = 1))
-
-
-        result.success should be (right = false)
+        candidate ! appendEntries
+        expectMsg(EntriesAccepted(term, success = false))
       }
 
       "Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm" in {
-        val serverState = new ServerState
-        val follower = new Follower (serverState)
+        val term = 4
+        val maxLogEntry = 4
+        val leaderTerm = term + 1
+        val log = logUpTo(term = term, maxLogEntry)
+        log.commitTo(4)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val appendEntries = AppendEntries(term = leaderTerm, leaderId = 99, prevLogIndex = maxLogEntry, prevLogTerm = leaderTerm, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
+        val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
-        serverState.log = Array(LogEntry(term = 1, Entry(Array())))
-
-        val result = follower.appendEntries(
-          AppendEntriesRequest(
-            term = 2,
-            leaderId = 1,
-            prevLogIndex = 1,
-            prevLogTerm = 2,
-            entries = Array(),
-            leaderCommit = 1))
-
-        result.success should be (right = false)
-      }
-
-      "replaces an existing entry with a new one if the index is the same but has a different term" in {
-        /*
-        val serverState = new ServerState
-        val follower = new Follower (serverState)
-        val data = "foo".getBytes("utf-8")
-
-        serverState.log = Array(LogEntry(term = 1, Entry(Array())))
-
-        val result = follower.appendEntries(
-          AppendEntriesRequest(
-            term = 2,
-            leaderId = 1,
-            prevLogIndex = 1,
-            prevLogTerm = 1,
-            entries = Array(Entry(data)),
-            leaderCommit = 1))
-
-        result.success should be (right = true)
-        result.term should be (2)
-
-        serverState.log(0).entry.data should be (data)
-        */
-      }
-
-      "appends any new entries not already in the log" in {
-        val serverState = new ServerState
-        val follower = new Follower (serverState)
-        val data = "foo".getBytes("utf-8")
-
-        val result = follower.appendEntries(
-          AppendEntriesRequest(
-            term = 2,
-            leaderId = 1,
-            prevLogIndex = 0,
-            prevLogTerm = 0,
-            entries = Array(Entry(data)),
-            leaderCommit = 1))
-
-        result.success should be (right = true)
-        result.term should be (2)
-
-        serverState.log(1).entry.data should be (data)
+        candidate ! appendEntries
+        expectMsg(EntriesAccepted(term, success = false))
       }
 
       "If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)" in {
-        val serverState = new ServerState
-        val follower = new Follower (serverState)
-        val data = "foo".getBytes("utf-8")
+        val term = 4
+        val maxLogEntry = 4
+        val leaderTerm = term + 1
 
-        val result = follower.appendEntries(
-          AppendEntriesRequest(
-            term = 2,
-            leaderId = 1,
-            prevLogIndex = 0,
-            prevLogTerm = 0,
-            entries = Array(Entry(data)),
-            leaderCommit = 3))
+        val log = logUpTo(term = term, maxLogEntry)
+        log.commitTo(4)
 
-        serverState.commitIndex should be (1)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+
+        val appendEntries = AppendEntries(term = leaderTerm,
+          leaderId = 99,
+          prevLogIndex = maxLogEntry,
+          prevLogTerm = term,
+          entries = Array(LogEntry(5, 5, bytesFrom(5))),
+          leaderCommit = 6)
+        val candidate = TestFSMRef(new CandidateStub(1, candidateData))
+
+        candidate ! appendEntries
+        expectMsg(EntriesAccepted(term, success = true))
+        candidate.stateData.log.lastCommitted should be (5)
       }
-      */
+    }
   }
 }
