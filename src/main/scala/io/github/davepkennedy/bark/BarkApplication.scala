@@ -14,7 +14,7 @@ import scala.util.Random
 object BarkStateManager {
   def props(id: Int, display: ActorRef) = Props(classOf[BarkStateManager], id, display)
 
-  case class Bootstrap (peers: Seq[ActorRef])
+  case class Bootstrap (peers: Map[Int,ActorRef])
 }
 
 class BarkStateManager (val id: Int, display: ActorRef) extends Candidate with Follower with Leader with Displayable with SystemTime {
@@ -52,6 +52,7 @@ class BarkStateManager (val id: Int, display: ActorRef) extends Candidate with F
 }
 
 object BarkApplication {
+  val actorCount = 27
   val actorSystem = ActorSystem ("bark")
 
   def main (args: Array[String]): Unit = {
@@ -59,9 +60,9 @@ object BarkApplication {
     
     val display = actorSystem.actorOf(Display.props)
 
-    val peers = for (i <- 0 until 27) yield actorSystem.actorOf(BarkStateManager.props(i, display), s"Actor-$i")
+    val peers = (for (i <- 0 until actorCount) yield (i -> actorSystem.actorOf(BarkStateManager.props(i, display), s"Actor-$i"))).toMap
     peers foreach {
-      peer => peer ! BarkStateManager.Bootstrap (peers)
+      case (id, peer) => peer ! BarkStateManager.Bootstrap (peers)
     }
 
     Await.result(actorSystem.whenTerminated, Duration.Inf)

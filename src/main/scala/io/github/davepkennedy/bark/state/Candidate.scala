@@ -22,12 +22,13 @@ trait Candidate extends RaftActor {
       displayMe(data)
       if (now - data.lastTick > RaftActor.StateTimeout) {
         data.peers foreach {
-          peer =>
+          case (peerId,peer) if peerId != id =>
             peer ! RequestVote (
               data.currentTerm + 1,
               id,
               data.log.lastApplied,
               data.log.lastTerm)
+          case _ =>
         }
         stay using data.copy(
           lastTick = now,
@@ -37,17 +38,17 @@ trait Candidate extends RaftActor {
       } else {
         stay using data
       }
-    case Event (Vote(term, voteGranted), data: CandidateData) =>
+    case Event (Vote(voter, term, voteGranted), data: CandidateData) =>
       displayMe(data)
       val votesGranted = data.votesGranted + (if (voteGranted) {1} else {0})
-      if (votesGranted >= ((data.peers.length / 2) + 1)) {
+      if (votesGranted >= ((data.peers.size / 2) + 1)) {
         goto (LeaderState) using LeaderData (
           lastTick = now,
           currentTerm = data.currentTerm,
           peers = data.peers,
           log = data.log,
-          nextIndex = Array.empty,
-          matchIndex = Array.empty)
+          nextIndex = Array.fill (data.peers.size) {data.log.lastApplied},
+          matchIndex = Array.fill (data.peers.size) {0})
       } else {
         stay using data.copy(
           lastTick = now, votesGranted = votesGranted)

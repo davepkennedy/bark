@@ -24,19 +24,19 @@ sealed trait RaftData {
 final case class FollowerData (lastTick: Long,
                                currentTerm: Int = 0,
                                votedFor: Option[Int] = None,
-                               peers: Seq[ActorRef] = Seq.empty,
+                               peers: Map[Int,ActorRef] = Map.empty,
                                log: Log = new Log) extends RaftData
 
 final case class CandidateData (lastTick: Long,
                                 currentTerm: Int,
                                 votesGranted: Int = 0,
                                 votedFor: Option[Int] = None,
-                                peers: Seq[ActorRef],
+                                peers: Map[Int,ActorRef],
                                 log: Log = new Log) extends RaftData
 
 final case class LeaderData (lastTick: Long,
                              currentTerm: Int,
-                             peers: Seq[ActorRef],
+                             peers: Map[Int,ActorRef],
                              log: Log = new Log,
                              nextIndex: Array[Int],
                              matchIndex: Array[Int]) extends RaftData {
@@ -48,8 +48,9 @@ final case class RequestVote (term: Int,
                                candidateId: Int,
                                lastLogIndex: Int,
                                lastLogTerm: Int)
-final case class Vote (term: Int,
-                        granted: Boolean)
+final case class Vote (id: Int,
+                       term: Int,
+                       granted: Boolean)
 
 final case class AppendEntries (term: Int,
                                  leaderId: Int,
@@ -57,8 +58,9 @@ final case class AppendEntries (term: Int,
                                  prevLogTerm: Int,
                                  entries: Array[LogEntry],
                                  leaderCommit: Int)
-final case class EntriesAccepted (term: Int,
-                                   success: Boolean)
+final case class EntriesAccepted (id: Int,
+                                  term: Int,
+                                  success: Boolean)
 
 object RaftActor {
   val StateTimeout: Long = 250
@@ -94,9 +96,9 @@ trait RaftActor extends FSM[RaftState,RaftData] with ActorLogging {
     else false
   }
 
-  def acceptVote (term: Int) = Vote(term, granted = true)
-  def rejectVote (term: Int) = Vote(term, granted = false)
+  def acceptVote (term: Int) = Vote(id, term, granted = true)
+  def rejectVote (term: Int) = Vote(id, term, granted = false)
 
-  def acceptEntries (term: Int) = EntriesAccepted (term, success = true)
-  def rejectEntries (term: Int) = EntriesAccepted (term, success = false)
+  def acceptEntries (term: Int) = EntriesAccepted (id, term, success = true)
+  def rejectEntries (term: Int) = EntriesAccepted (id, term, success = false)
 }

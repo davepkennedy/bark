@@ -35,7 +35,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
         follower ! RequestVote(term = 2, candidateId = 2, 0, 0)
-        expectMsg(Vote(term = 3, granted = false))
+        expectMsg(Vote(1, term = 3, granted = false))
       }
 
       "rejects vote if voted for some other candidate" in {
@@ -44,7 +44,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
         follower ! requestVote
-        expectMsg(Vote(term = 3, granted = false))
+        expectMsg(Vote(1, term = 3, granted = false))
       }
 
       "rejects vote if candidates log is less up to date" in {
@@ -55,7 +55,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
         follower ! requestVote
-        expectMsg(Vote(term = 3, granted = false))
+        expectMsg(Vote(1, term = 3, granted = false))
       }
 
       "accepts vote if voted for is null and candidates log is at least as up to date as receivers log" in {
@@ -67,7 +67,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
         follower ! requestVote
-        expectMsg(Vote(term = 3, granted = true))
+        expectMsg(Vote(1, term = 3, granted = true))
 
         follower.stateData.votedFor should be(Some(3))
       }
@@ -80,7 +80,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val follower = TestFSMRef(new FollowerStub(1, followerData))
 
         follower ! requestVote
-        expectMsg(Vote(term = 3, granted = true))
+        expectMsg(Vote(1, term = 3, granted = true))
       }
 
       "accepting a vote resets the timeout" in {
@@ -93,7 +93,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         follower.underlyingActor.setTime(500)
 
         follower ! requestVote
-        expectMsg(Vote(term = 3, granted = true))
+        expectMsg(Vote(1, term = 3, granted = true))
 
         follower.stateData.asInstanceOf[FollowerData].lastTick should be (500)
       }
@@ -105,7 +105,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         follower.underlyingActor.setTime(500)
 
         follower ! requestVote
-        expectMsg(Vote(term = 4, granted = false))
+        expectMsg(Vote(1, term = 4, granted = false))
 
         follower.stateData.asInstanceOf[FollowerData].lastTick should be (500)
       }
@@ -118,12 +118,12 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val leaderTerm = term - 1
         val log = logUpTo(term = term, maxLogEntry)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val appendEntries = AppendEntries(term = leaderTerm, leaderId = 99, prevLogIndex = 4, prevLogTerm = term, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(term, success = false))
+        expectMsg(EntriesAccepted(1, term, success = false))
       }
 
       "Reply false if log doesn’t contain an entry at prevLogIndex" in {
@@ -132,12 +132,12 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val leaderTerm = term + 1
         val log = logUpTo(term = term, maxLogEntry)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val appendEntries = AppendEntries(term = leaderTerm, leaderId = 99, prevLogIndex = maxLogEntry + 1, prevLogTerm = term, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(term, success = false))
+        expectMsg(EntriesAccepted(1, term, success = false))
       }
 
       "Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm" in {
@@ -146,12 +146,12 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val leaderTerm = term + 1
         val log = logUpTo(term = term, maxLogEntry)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val appendEntries = AppendEntries(term = leaderTerm, leaderId = 99, prevLogIndex = maxLogEntry, prevLogTerm = leaderTerm, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(term, success = false))
+        expectMsg(EntriesAccepted(1, term, success = false))
       }
 
       "If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)" in {
@@ -162,7 +162,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val log = logUpTo(term = term, maxLogEntry)
         log.commitTo(4)
 
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
 
         val appendEntries = AppendEntries(term = leaderTerm,
           leaderId = 99,
@@ -173,7 +173,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(term, success = true))
+        expectMsg(EntriesAccepted(1, term, success = true))
         candidate.stateData.log.lastCommitted should be (5)
       }
     }

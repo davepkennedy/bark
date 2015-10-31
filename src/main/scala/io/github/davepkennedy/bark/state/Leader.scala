@@ -13,7 +13,7 @@ trait Leader extends RaftActor {
       data.currentTerm,
       data.log.lastCommitted,
       votedFor = data.votedFor,
-      data.peers.length,
+      data.peers.size,
       data.lastTick)
   }
 
@@ -31,8 +31,9 @@ trait Leader extends RaftActor {
       }
       else {
         data.peers foreach {
-          peer =>
+          case (peerId,peer) if peerId != id =>
             peer ! AppendEntries (data.currentTerm, id, 0, 0, Array.empty, data.log.lastApplied)
+          case _ =>
         }
         stay using data
       }

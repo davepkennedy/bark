@@ -39,47 +39,47 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val term = 3
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(0, currentTerm = term, peers = Map.empty, log = log)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! RequestVote(term = 2, candidateId = 2, 0, 0)
-        expectMsg(Vote(term = 3, granted = false))
+        expectMsg(Vote(1, term = 3, granted = false))
       }
 
       "rejects vote if voted for some other candidate" in {
         val term = 3
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(0, currentTerm = term, votedFor = Some(2), peers = Seq.empty, log = log)
+        val candidateData = CandidateData(0, currentTerm = term, votedFor = Some(2), peers = Map.empty, log = log)
         val requestVote = RequestVote(term = 3, candidateId = 3, 0, 0)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! requestVote
-        expectMsg(Vote(term = 3, granted = false))
+        expectMsg(Vote(1, term = 3, granted = false))
       }
 
       "rejects vote if candidates log is less up to date" in {
         val term = 3
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val requestVote = RequestVote(term = 3, candidateId = 3, lastLogIndex = 3, lastLogTerm = 2)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! requestVote
-        expectMsg(Vote(term = 3, granted = false))
+        expectMsg(Vote(1, term = 3, granted = false))
       }
 
       "accepts vote if voted for is null and candidates log is at least as up to date as receivers log" in {
         val term = 3
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! requestVote
-        expectMsg(Vote(term = 3, granted = true))
+        expectMsg(Vote(1, term = 3, granted = true))
 
         candidate.stateData.votedFor should be(Some(3))
       }
@@ -88,12 +88,12 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val term = 3
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, votedFor = Some(3), peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, votedFor = Some(3), peers = Map.empty, log = log)
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! requestVote
-        expectMsg(Vote(term = 3, granted = true))
+        expectMsg(Vote(1, term = 3, granted = true))
       }
 
       "accepting a vote reverts to Follower" in {
@@ -101,13 +101,13 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val log = logUpTo(term, 4)
         log.commitTo(4)
 
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, votedFor = Some(3), peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, votedFor = Some(3), peers = Map.empty, log = log)
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
         candidate.underlyingActor.setTime(500)
 
         candidate ! requestVote
-        expectMsg(Vote(term = 3, granted = true))
+        expectMsg(Vote(1, term = 3, granted = true))
 
         candidate.stateName should be (FollowerState)
       }
@@ -116,13 +116,13 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val term = 3
         val log = logUpTo(term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, votedFor = Some(3), peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, votedFor = Some(3), peers = Map.empty, log = log)
         val requestVote = RequestVote(term = 4, candidateId = 3, lastLogIndex = 5, lastLogTerm = 3)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
         candidate.underlyingActor.setTime(500)
 
         candidate ! requestVote
-        expectMsg(Vote(term = 3, granted = true))
+        expectMsg(Vote(1, term = 3, granted = true))
 
         candidate.stateData.asInstanceOf[FollowerData].lastTick should be (500)
       }
@@ -131,13 +131,13 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val term = 4
         val log = logUpTo(term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val requestVote = RequestVote(term = 3, candidateId = 2, 0, 0)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
         candidate.underlyingActor.setTime(500)
 
         candidate ! requestVote
-        expectMsg(Vote(term = 4, granted = false))
+        expectMsg(Vote(1, term = 4, granted = false))
 
         candidate.stateData.asInstanceOf[CandidateData].lastTick should be (500)
       }
@@ -148,32 +148,32 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val term = 4
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val appendEntries = AppendEntries (term = 5, leaderId = 99, prevLogIndex = 4, prevLogTerm = term, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted (term, success = true))
+        expectMsg(EntriesAccepted (1, term, success = true))
       }
 
       "invalid entries are rejected" in {
         val term = 4
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         // Prev log index does not match any in the current log
         val appendEntries = AppendEntries (term = 5, leaderId = 99, prevLogIndex = 5, prevLogTerm = term, entries = Array(LogEntry(5, 5, bytesFrom(5))), leaderCommit = 10)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted (term, success = false))
+        expectMsg(EntriesAccepted (1, term, success = false))
       }
 
       "reverts back to Follower" in {
         val term = 4
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
-        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Seq.empty, log = log)
+        val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
         val appendEntries = AppendEntries (term = 5, leaderId = 99, prevLogIndex = 6, prevLogTerm = 4, entries = Array.empty, leaderCommit = 10)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
         candidate.underlyingActor.setTime(500)
