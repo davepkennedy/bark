@@ -12,9 +12,14 @@ class Log {
   }
 
   def hasEntryAt (prevLogIndex: Int, prevLogTerm: Int): Boolean = {
-    entries.find {
-      entry => entry.index == prevLogIndex
-    }.exists { e => e.term == prevLogTerm }
+    if (prevLogIndex == 0 && prevLogTerm == 0) {
+      true
+    }
+    else {
+      entries.find {
+        entry => entry.index == prevLogIndex
+      }.exists { e => e.term == prevLogTerm }
+    }
   }
 
   private def removeConflicts (newEntries: Seq[LogEntry]): Unit = {
@@ -60,4 +65,7 @@ class Log {
       }.map {e => e.term}.getOrElse(0)
     }
   }
+
+
+  override def toString = s"Log(Comitted: $commited, Entries: $entries, Applied: $lastApplied, Last Term: $lastTerm)"
 }

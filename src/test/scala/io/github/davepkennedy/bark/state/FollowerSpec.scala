@@ -3,6 +3,8 @@ package io.github.davepkennedy.bark.state
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestFSMRef, TestKit}
 import io.github.davepkennedy.bark.ui.Displayable
+import io.github.davepkennedy.bark._
+
 import org.scalatest._
 
 class FollowerStub (val id: Int, initData: FollowerData) extends Follower with Displayable with TimeFixture {
@@ -123,7 +125,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(1, term, success = false))
+        expectMsg(EntriesAccepted(1, term, success = false, lastEntry = 4))
       }
 
       "Reply false if log doesn’t contain an entry at prevLogIndex" in {
@@ -137,7 +139,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(1, term, success = false))
+        expectMsg(EntriesAccepted(1, term, success = false, lastEntry = 4))
       }
 
       "Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm" in {
@@ -151,7 +153,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(1, term, success = false))
+        expectMsg(EntriesAccepted(1, term, success = false, lastEntry = 4))
       }
 
       "If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry)" in {
@@ -173,7 +175,7 @@ class FollowerSpec extends TestKit (ActorSystem("FollowerSpec")) with FreeSpecLi
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted(1, term, success = true))
+        expectMsg(EntriesAccepted(1, term, success = true, lastEntry = 5))
         candidate.stateData.log.lastCommitted should be (5)
       }
     }

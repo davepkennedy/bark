@@ -25,9 +25,9 @@ trait Follower extends RaftActor {
       // Not actually appending entries yet…
       if (shouldAcceptEntries(appendEntries, data)) {
         appendEntriesToLog(appendEntries, data)
-        sender ! acceptEntries(data.currentTerm)
+        sender ! acceptEntries(data.currentTerm, data.log.lastApplied)
       } else {
-        sender ! rejectEntries(data.currentTerm)
+        sender ! rejectEntries(data.currentTerm, data.log.lastApplied)
       }
       stay using data.copy(lastTick = now)
     case Event (Tick, data: FollowerData) =>

@@ -1,5 +1,6 @@
 package io.github.davepkennedy.bark.state
 
+import io.github.davepkennedy.bark._
 import java.nio.ByteBuffer
 
 import org.scalatest.{Matchers, FreeSpec}

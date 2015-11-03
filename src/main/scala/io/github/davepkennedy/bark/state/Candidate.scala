@@ -47,8 +47,9 @@ trait Candidate extends RaftActor {
           currentTerm = data.currentTerm,
           peers = data.peers,
           log = data.log,
-          nextIndex = Array.fill (data.peers.size) {data.log.lastApplied},
-          matchIndex = Array.fill (data.peers.size) {0})
+          //nextIndex = Array.fill (data.peers.size) {data.log.lastApplied},
+          nextIndex = data.peers map {case (peerId,_) => peerId -> (data.log.lastApplied + 1)},
+          matchIndex = data.peers map {case (peerId,_) => peerId -> 0})
       } else {
         stay using data.copy(
           lastTick = now, votesGranted = votesGranted)
@@ -56,9 +57,9 @@ trait Candidate extends RaftActor {
     case Event(appendEntries: AppendEntries, data: CandidateData) =>
       if (shouldAcceptEntries(appendEntries, data)) {
         appendEntriesToLog (appendEntries, data)
-        sender ! acceptEntries(data.currentTerm)
+        sender ! acceptEntries(data.currentTerm, data.log.lastApplied)
       } else {
-        sender ! rejectEntries(data.currentTerm)
+        sender ! rejectEntries(data.currentTerm, data.log.lastApplied)
       }
       goto (FollowerState) using FollowerData (
         lastTick = now,

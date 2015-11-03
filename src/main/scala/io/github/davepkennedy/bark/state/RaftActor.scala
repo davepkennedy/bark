@@ -38,8 +38,8 @@ final case class LeaderData (lastTick: Long,
                              currentTerm: Int,
                              peers: Map[Int,ActorRef],
                              log: Log = new Log,
-                             nextIndex: Array[Int],
-                             matchIndex: Array[Int]) extends RaftData {
+                             nextIndex: Map[Int,Int],
+                             matchIndex: Map[Int,Int]) extends RaftData {
   val votedFor = None
 }
 
@@ -56,10 +56,11 @@ final case class AppendEntries (term: Int,
                                  leaderId: Int,
                                  prevLogIndex: Int,
                                  prevLogTerm: Int,
-                                 entries: Array[LogEntry],
+                                 entries: Seq[LogEntry],
                                  leaderCommit: Int)
 final case class EntriesAccepted (id: Int,
                                   term: Int,
+                                  lastEntry: Int,
                                   success: Boolean)
 
 object RaftActor {
@@ -99,6 +100,6 @@ trait RaftActor extends FSM[RaftState,RaftData] with ActorLogging {
   def acceptVote (term: Int) = Vote(id, term, granted = true)
   def rejectVote (term: Int) = Vote(id, term, granted = false)
 
-  def acceptEntries (term: Int) = EntriesAccepted (id, term, success = true)
-  def rejectEntries (term: Int) = EntriesAccepted (id, term, success = false)
+  def acceptEntries (term: Int, lastEntry: Int) = EntriesAccepted (id, term, lastEntry = lastEntry, success = true)
+  def rejectEntries (term: Int, lastEntry: Int) = EntriesAccepted (id, term, lastEntry = lastEntry, success = false)
 }

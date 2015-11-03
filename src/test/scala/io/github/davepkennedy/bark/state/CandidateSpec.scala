@@ -5,6 +5,8 @@ import akka.testkit.{ImplicitSender, TestFSMRef, TestKit}
 import io.github.davepkennedy.bark.ui.Displayable
 import org.scalatest.{BeforeAndAfterAll, FreeSpecLike, Matchers}
 
+import io.github.davepkennedy.bark._
+
 class CandidateStub (val id: Int, initData: CandidateData) extends Candidate with Displayable with TimeFixture {
   override def display(id: Int,
                        name: String,
@@ -153,7 +155,7 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted (1, term, success = true))
+        expectMsg(EntriesAccepted (1, term, success = true, lastEntry = 5))
       }
 
       "invalid entries are rejected" in {
@@ -166,7 +168,7 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
 
         candidate ! appendEntries
-        expectMsg(EntriesAccepted (1, term, success = false))
+        expectMsg(EntriesAccepted (1, term, success = false, lastEntry = 4))
       }
 
       "reverts back to Follower" in {
@@ -174,7 +176,7 @@ class CandidateSpec  extends TestKit (ActorSystem("CandidateSpec")) with FreeSpe
         val log = logUpTo(term = term, 4)
         log.commitTo(4)
         val candidateData = CandidateData(lastTick = 0, currentTerm = term, peers = Map.empty, log = log)
-        val appendEntries = AppendEntries (term = 5, leaderId = 99, prevLogIndex = 6, prevLogTerm = 4, entries = Array.empty, leaderCommit = 10)
+        val appendEntries = AppendEntries (term = 5, leaderId = 99, prevLogIndex = 6, prevLogTerm = 4, entries = Seq.empty, leaderCommit = 10)
         val candidate = TestFSMRef(new CandidateStub(1, candidateData))
         candidate.underlyingActor.setTime(500)
 

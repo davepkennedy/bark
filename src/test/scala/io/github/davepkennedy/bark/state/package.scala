@@ -6,7 +6,6 @@ import java.nio.ByteBuffer
  * Created by dave on 28/10/2015.
  */
 package object state {
-  def bytesFrom (i: Int) = ByteBuffer.allocate(4).putInt(i).array()
 
   def logUpTo (term: Int, maxEntry: Int): Log = {
     val log = new Log
