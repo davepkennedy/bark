@@ -1,4 +1,5 @@
-# bark
+![Travis Build Status](https://travis-ci.org/davepkennedy/bark.svg?branch=master)
+# bark 
 A bark is a kind of boat. A raft is a kind of boat. Bark is a very simple implementation of Raft. 
 
 # Election
